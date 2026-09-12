@@ -1,0 +1,32 @@
+{
+  // F5 默认执行第一个配置：先打包，再启动打包好的 exe。
+  // 程序启动后会自己弹 UAC 提权，同意后出现的是一个新的管理员进程，
+  // 此时调试会话随原进程一起结束——这是预期行为，不是启动失败。
+  // 需要断点调试时改选"调试源码（跳过提权）"。
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "打包并启动",
+      "type": "go",
+      "request": "launch",
+      "mode": "exec",
+      "program": "${workspaceFolder}/bin/windows-util-gui.exe",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "打包发布版",
+      "console": "integratedTerminal"
+    },
+    {
+      // 调试必须跳过自提权：否则程序会把自己重新拉起为独立的管理员进程，
+      // 调试器只剩下一个已退出的空壳，断点全部失效。
+      // 代价是这个会话没有管理员权限，结束系统级进程会失败。
+      "name": "调试源码（跳过提权）",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}",
+      "cwd": "${workspaceFolder}",
+      "args": ["-no-elevate"],
+      "console": "integratedTerminal"
+    }
+  ]
+}

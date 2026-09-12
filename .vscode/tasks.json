@@ -1,0 +1,100 @@
+{
+  // Windows 工具箱构建任务。
+  // 默认构建任务（Ctrl+Shift+B）是"打包发布版"，日常改代码想看控制台日志时手动选"构建开发版"。
+  "version": "2.0.0",
+  "tasks": [
+    {
+      // 发布版必须带 -H=windowsgui：Go 默认生成 CONSOLE 子系统程序，
+      // 双击 exe 会额外弹出一个黑色控制台窗口，作为 GUI 工具不可接受。
+      // -s -w 去掉符号表与调试信息，-trimpath 去掉编译机的绝对路径。
+      "label": "打包发布版",
+      "type": "process",
+      "command": "go",
+      "args": [
+        "build",
+        "-trimpath",
+        "-ldflags",
+        "-s -w -H=windowsgui",
+        "-o",
+        "bin/windows-util-gui.exe",
+        "."
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": ["$go"]
+    },
+    {
+      // 开发版保留 CONSOLE 子系统：启动失败时 main 会把错误写到 stderr，
+      // 终端里能直接看到并复制，比只有一个弹窗好排查。
+      "label": "构建开发版",
+      "type": "process",
+      "command": "go",
+      "args": ["build", "-o", "bin/windows-util-gui-dev.exe", "."],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": ["$go"]
+    },
+    {
+      "label": "运行测试",
+      "type": "process",
+      "command": "go",
+      "args": ["test", "./test/...", "-v"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": ["$go"]
+    },
+    {
+      // 只在改过 build/app.manifest 后才需要执行，平时不用跑：
+      // 生成的 syso 已随仓库提交，且该命令需要联网拉取 rsrc 工具。
+      "label": "重新生成资源文件",
+      "type": "process",
+      "command": "go",
+      "args": [
+        "run",
+        "github.com/akavel/rsrc@latest",
+        "-manifest",
+        "build/app.manifest",
+        "-arch",
+        "amd64",
+        "-o",
+        "rsrc_windows_amd64.syso"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": []
+    }
+  ]
+}
