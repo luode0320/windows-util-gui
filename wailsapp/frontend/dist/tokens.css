@@ -1,0 +1,55 @@
+/* ===== 设计令牌：单一强调色 Apple 风（理想稿还原）===== */
+/* 所有视觉常量集中在此，app.css 仅引用，禁止在布局里写死色值 */
+
+:root {
+  /* 色板 —— 主色与中性色 */
+  --primary: #0066CC;          /* 单一强调色 */
+  --primary-hover: #0071E3;    /* 主色悬停 */
+  --ink: #1D1D1F;              /* 近黑正文 */
+  --muted: #7A7A7A;            /* 次级文字 */
+  --faint: #A1A1A6;            /* 更弱的提示文字 */
+  --canvas: #F5F5F7;           /* 画布底色 */
+  --card: #FFFFFF;             /* 卡片底 */
+  --hairline: #E8E8ED;         /* 卡片细边框 */
+  --divider: #F0F0F2;          /* 表头/行分隔线 */
+  --danger: #D70015;           /* 错误红 */
+  --success: #248A3D;          /* 成功绿 */
+  --wsl: #5E5CE6;              /* WSL 紫 */
+  --warn: #B25000;             /* 普通权限橙 */
+  --row-hover: #FAFAFC;        /* 行悬停 */
+
+  /* 侧栏深色 */
+  --sidebar-bg: #1D1D1F;
+  --sidebar-text: #FFFFFF;
+  --sidebar-muted: #6E6E73;    /* 侧栏分组/版本 */
+  --sidebar-faint: #98989D;    /* 侧栏说明文字 */
+  --sidebar-nav: #A1A1A6;      /* 导航默认字 */
+  --sidebar-active: rgba(255, 255, 255, 0.09);
+  --sidebar-panel: rgba(255, 255, 255, 0.07);
+  --sidebar-shield: #98989D;   /* 权限图标 */
+  --perm-dot: #34C759;         /* 绿点（已提权） */
+  --perm-dot-gray: #8E8E93;    /* 灰点（普通） */
+
+  /* 徽章底色（来源 / 状态）*/
+  --badge-win-bg: #E8F1FC; --badge-win-fg: #0066CC;   /* Windows */
+  --badge-wsl-bg: #EEEEFB; --badge-wsl-fg: #5E5CE6;   /* WSL */
+  --badge-state-bg: #E6F7EC; --badge-state-fg: #248A3D; /* 状态 */
+
+  /* 圆角 */
+  --r-card: 16px;     /* 卡片 */
+  --r-input: 999px;   /* 胶囊按钮/输入框/分段控件 */
+  --r-chip: 6px;      /* 来源徽章小圆角 */
+
+  /* 间距阶梯 */
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 20px; --sp-6: 24px; --sp-7: 28px;
+
+  /* 排版 */
+  --font: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+  --fs-xs: 11px;  --fs-sm: 12px; --fs-md: 13px; --fs-base: 14px;
+  --fs-lg: 15px;  --fs-xl: 20px;
+
+  /* 固定尺寸 */
+  --sidebar-w: 232px;
+  --control-h: 38px;
+}

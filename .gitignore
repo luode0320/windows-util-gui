@@ -5,3 +5,10 @@ resources/bin/
 # 本地调试产物
 *.log
 *.pprof
+
+# Wails 构建产物与运行时释放物（exe / data 由 wails build 生成，tdl 运行时释放）
+/wailsapp/build/bin/
+# wails 每次构建自动生成的前端绑定
+/wailsapp/frontend/wailsjs/
+# WorkBuddy 工作区状态（项目记忆/剪贴板等，仅本地保留）
+/.workbuddy/

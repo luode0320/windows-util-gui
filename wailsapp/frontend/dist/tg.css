@@ -1,0 +1,120 @@
+/* ===== TG 消息转发页样式：全部引用 tokens.css 设计变量 ===== */
+
+/* 页面切换：进程页 / TG 页互斥显示，active 样式联动 */
+.page {
+  display: none;
+  flex: 1; min-height: 0;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.page.active { display: flex; overflow-y: auto; }
+
+/* ===== 字段布局 ===== */
+.tg-field {
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  margin-bottom: var(--sp-4);
+}
+.tg-field:last-child { margin-bottom: 0; }
+.tg-field > label {
+  font-size: var(--fs-sm); font-weight: 600; color: var(--ink);
+}
+.tg-inline {
+  display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
+}
+
+/* ===== 胶囊表单控件：select / input 风格统一 ===== */
+.tg-select {
+  flex: 1; min-width: 180px; height: var(--control-h);
+  border: 1px solid var(--hairline); background-color: #fff; color: var(--ink);
+  border-radius: var(--r-input); padding: 0 34px 0 var(--sp-4);
+  font-size: var(--fs-md); font-family: inherit; cursor: pointer;
+  appearance: none; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' fill='none' stroke='%237A7A7A' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 14px center;
+}
+.tg-select:focus { outline: none; border-color: var(--primary); }
+
+.tg-num {
+  width: 92px; height: var(--control-h);
+  border: 1px solid var(--hairline); background: #fff; color: var(--ink);
+  border-radius: 10px; padding: 0 12px;
+  font-size: var(--fs-md); font-family: inherit;
+}
+.tg-num:focus { outline: none; border-color: var(--primary); }
+
+/* 登录状态行复用 .dot / .dot.gray 绿灰点 */
+.tg-login-row {
+  display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
+}
+#tg-login-text { font-size: var(--fs-md); font-weight: 500; color: var(--ink); }
+
+/* ===== 类型筛选多选 chips ===== */
+.tg-chips { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+.tg-filter {
+  height: 32px; padding: 0 14px;
+  border-radius: var(--r-input);
+  border: 1.5px solid var(--hairline); background: #fff; color: var(--muted);
+  font-size: var(--fs-sm); font-weight: 500; font-family: inherit; cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.tg-filter:hover { border-color: var(--primary); }
+.tg-filter.on {
+  background: var(--primary); border-color: var(--primary); color: #fff;
+}
+.tg-filter:active { transform: scale(0.96); }
+
+/* ===== 勾选项 ===== */
+.tg-check {
+  display: flex; align-items: center; gap: 8px;
+  font-size: var(--fs-sm); color: var(--ink); cursor: pointer;
+  margin-bottom: 6px; font-weight: 400;
+}
+.tg-check input { width: 16px; height: 16px; accent-color: var(--primary); cursor: pointer; }
+
+/* ===== 卡片底部操作区 ===== */
+.tg-actions {
+  display: flex; align-items: center; gap: var(--sp-3);
+  margin-top: var(--sp-2);
+}
+
+/* ===== TG 模态（复用进程页遮罩 .modal-overlay）===== */
+.tg-modal {
+  width: 420px; max-width: 100%; max-height: 86vh; overflow-y: auto;
+  background: #fff; border-radius: 20px; padding: 28px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+  animation: kill-pop 0.16s ease-out; /* 复用进程弹窗动画 */
+}
+.tg-chats-modal { width: 680px; }
+
+/* 二维码区：200×200 占位 */
+.tg-qr-box {
+  width: 200px; height: 200px; margin: 12px auto;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--canvas); border-radius: 12px; overflow: hidden;
+}
+.tg-qr-img { width: 200px; height: 200px; object-fit: contain; display: block; }
+.tg-qr-ph {
+  font-size: var(--fs-sm); color: var(--faint);
+  text-align: center; padding: 0 16px;
+}
+
+/* 聊天列表表格列宽 */
+.col-tg-id { width: 90px; }
+.col-tg-type { width: 70px; }
+.col-tg-act { width: 220px; }
+tbody td.tg-chat-act {
+  display: flex; gap: 6px; align-items: center; padding-top: 8px; padding-bottom: 8px;
+}
+.tg-chat-btn {
+  height: 28px; padding: 0 10px; border-radius: var(--r-input);
+  background: #fff; color: var(--primary);
+  border: 1.5px solid rgba(0, 102, 204, 0.35);
+  font-size: var(--fs-xs); font-weight: 600; font-family: inherit; cursor: pointer;
+  white-space: nowrap;
+}
+.tg-chat-btn:hover { background: rgba(0, 102, 204, 0.06); }
+.tg-chat-btn:active { transform: scale(0.97); }
+.tg-chat-id {
+  font-variant-numeric: tabular-nums; color: var(--muted);
+  cursor: pointer; font-size: var(--fs-xs);
+}

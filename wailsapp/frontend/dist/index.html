@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>Windows 工具箱 · 进程占用查杀 / TG 转发</title>
+  <!-- 离线单文件分发：仅相对路径引用本地样式与脚本，无 CDN 外链 -->
+  <link rel="stylesheet" href="tokens.css" />
+  <link rel="stylesheet" href="app.css" />
+  <link rel="stylesheet" href="tg.css" />
+</head>
+<body>
+  <!-- ===== 左侧深色侧栏 ===== -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-logo">
+        <!-- 内联 SVG 图标：扳手 -->
+        <svg viewBox="0 0 24 24" fill="none"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div>
+        <div class="brand-name">Windows 工具箱</div>
+        <div class="brand-sub">Wails · 理想稿还原</div>
+      </div>
+    </div>
+
+    <div class="section-label">工具</div>
+    <!-- 导航项：点击切换页面，active 样式联动 -->
+    <div class="nav-item active" id="nav-process">
+      <!-- 内联 SVG：网格/进程 -->
+      <svg viewBox="0 0 24 24" fill="none"><rect x="5" y="5" width="14" height="14" rx="3" stroke="#fff" stroke-width="2"/><rect x="9.5" y="9.5" width="5" height="5" rx="1" stroke="#fff" stroke-width="2"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
+      进程占用查杀
+    </div>
+    <div class="nav-item" id="nav-tg">
+      <!-- 内联 SVG：纸飞机 -->
+      <svg viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      TG 消息转发
+    </div>
+
+    <div class="sidebar-grow"></div>
+
+    <!-- 底部权限卡片：绿点由 JS 按 IsElevated 填充 -->
+    <div class="perm-card">
+      <div class="perm-head">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="var(--sidebar-shield)" stroke-width="2" stroke-linejoin="round"/></svg>
+        权限状态
+      </div>
+      <div class="perm-row"><span class="dot" id="perm-dot"></span><span id="perm-text">检测中…</span></div>
+      <div class="perm-note" id="perm-note"></div>
+    </div>
+    <div class="version">v0.1.0 · Wails v2</div>
+  </aside>
+
+  <!-- ===== 主区 ===== -->
+  <main class="main">
+    <!-- ============ 进程占用查杀页 ============ -->
+    <div class="page active" id="page-process">
+      <div class="header">
+        <div>
+          <h1>进程占用查杀</h1>
+          <p>按端口 / PID / 进程名查找 Windows 宿主与全部 WSL 发行版中的占用进程</p>
+        </div>
+        <div class="header-grow"></div>
+        <!-- 权限 chip：内容由 JS 按 IsElevated 填充 -->
+        <span class="chip" id="elev-chip"><span class="dot"></span><span id="elev-text">检测中…</span></span>
+      </div>
+
+      <!-- 查询卡 -->
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">查询条件</span>
+          <span class="card-hint">同一份采集结果覆盖两侧：wslrelay 双侧记录一并呈现</span>
+        </div>
+        <div class="query-row">
+          <!-- 分段控件：三段全部可点 -->
+          <div class="segmented" id="segmented">
+            <button class="seg active" data-kind="port">按端口</button>
+            <button class="seg" data-kind="pid">按 PID</button>
+            <button class="seg" data-kind="name">按进程名</button>
+          </div>
+          <input class="search" id="search-input" placeholder="输入端口号，如 8080" spellcheck="false" />
+          <button class="btn primary" id="query-btn">查询</button>
+        </div>
+      </div>
+
+      <!-- 错误框：默认隐藏 -->
+      <div class="error-box" id="error-box"></div>
+
+      <!-- 结果卡 -->
+      <div class="card results-card">
+        <div class="results-head">
+          <span class="card-title">查询结果</span>
+          <span class="count-chip" id="count-chip">共 0 条</span>
+          <!-- 结束操作区：危险样式按钮，无勾选/无结果时禁用 -->
+          <div class="results-actions">
+            <button class="btn-kill" id="kill-selected-btn" disabled>结束选中进程</button>
+            <button class="btn-kill" id="kill-all-btn" disabled>结束全部结果</button>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <!-- 首列勾选：表头放全选 checkbox -->
+                <th class="col-check"><input type="checkbox" id="select-all" title="全选/取消全选" /></th>
+                <th class="col-origin">来源</th>
+                <th class="col-pid">PID</th>
+                <th>进程名</th>
+                <th class="col-listening">监听端点</th>
+                <th class="col-state">状态</th>
+              </tr>
+            </thead>
+            <tbody id="tbody">
+              <tr><td colspan="6"><div class="empty">选择查询方式并输入条件开始查询</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 日志卡 -->
+      <div class="card log-card">
+        <div class="card-head">
+          <span class="card-title">执行日志</span>
+        </div>
+        <div class="log-body" id="log-body"></div>
+      </div>
+
+      <!-- 底部状态行 -->
+      <div class="status-line" id="status-line"></div>
+    </div>
+
+    <!-- ============ TG 消息转发页 ============ -->
+    <div class="page" id="page-tg" hidden>
+      <div class="header">
+        <div>
+          <h1>TG 消息转发</h1>
+          <p>基于 tdl 的 Telegram 消息批量导出与分批自动化转发 · tdl.exe 已内置于程序</p>
+        </div>
+        <div class="header-grow"></div>
+        <!-- 内置状态 chip：由 TgGetState().tdlBundled 驱动 -->
+        <span class="chip ok" id="tg-bundle-chip"><span class="dot"></span><span id="tg-bundle-text">tdl.exe 已内置</span></span>
+      </div>
+
+      <!-- 卡片① 会话与登录 -->
+      <div class="card">
+        <div class="card-head"><span class="card-title">会话与登录</span></div>
+        <div class="tg-field">
+          <div class="tg-login-row">
+            <span class="dot gray" id="tg-login-dot"></span>
+            <span id="tg-login-text">未登录</span>
+            <button class="btn primary" id="tg-login-btn">扫码登录</button>
+            <button class="btn" id="tg-net-btn">网络测试</button>
+          </div>
+        </div>
+        <div class="tg-field">
+          <label>代理（可选）</label>
+          <div class="tg-inline">
+            <input class="search" id="tg-proxy-input" placeholder="http://127.0.0.1:7890" spellcheck="false" />
+            <button class="btn" id="tg-proxy-btn">保存代理</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 卡片② 消息导出 -->
+      <div class="card">
+        <div class="card-head"><span class="card-title">消息导出</span></div>
+        <div class="tg-field">
+          <label>源聊天</label>
+          <div class="tg-inline">
+            <select class="tg-select" id="tg-src-select"><option>加载中…</option></select>
+            <button class="btn" id="tg-chats-btn">查看聊天列表</button>
+          </div>
+        </div>
+        <div class="tg-field">
+          <label>导出范围</label>
+          <div class="tg-inline">
+            <div class="segmented" id="tg-range-seg">
+              <button class="seg active" data-mode="all">全部消息</button>
+              <button class="seg" data-mode="last">最近 N 条</button>
+            </div>
+            <input class="tg-num" id="tg-last-count" type="number" value="100" min="1" hidden />
+          </div>
+        </div>
+        <div class="tg-field">
+          <label>类型筛选</label>
+          <div class="tg-chips" id="tg-filter-chips">
+            <button class="tg-filter on" data-key="text">文本</button>
+            <button class="tg-filter on" data-key="txt">TXT</button>
+            <button class="tg-filter on" data-key="video">视频</button>
+            <button class="tg-filter on" data-key="novel">小说</button>
+            <button class="tg-filter on" data-key="epub">EPUB</button>
+            <button class="tg-filter on" data-key="mp4">MP4</button>
+          </div>
+        </div>
+        <button class="btn primary" id="tg-export-btn">开始导出</button>
+      </div>
+
+      <!-- 卡片③ 分批转发 -->
+      <div class="card">
+        <div class="card-head"><span class="card-title">分批转发</span></div>
+        <div class="tg-field">
+          <label>转发内容（导出记录）</label>
+          <div class="tg-inline">
+            <select class="tg-select" id="tg-record-select"><option>暂无导出记录</option></select>
+            <button class="btn-kill" id="tg-del-record-btn">清空所选导出</button>
+          </div>
+        </div>
+        <div class="tg-field">
+          <label>目标聊天</label>
+          <div class="tg-inline">
+            <select class="tg-select" id="tg-target-select"><option>加载中…</option></select>
+            <button class="btn" id="tg-set-target-btn">设为目标</button>
+          </div>
+        </div>
+        <div class="tg-field">
+          <label>转发模式</label>
+          <div class="segmented" id="tg-fwd-mode-seg">
+            <button class="seg active" data-mode="direct">direct · 保留来源</button>
+            <button class="seg" data-mode="clone">clone · 复制内容</button>
+          </div>
+        </div>
+        <div class="tg-field">
+          <label class="tg-check"><input type="checkbox" id="tg-dry-run" checked /> 试转发（不真正发送）</label>
+          <label class="tg-check"><input type="checkbox" id="tg-skip-fwd" checked /> 跳过已转发</label>
+          <label class="tg-check"><input type="checkbox" id="tg-reverse" /> 反转阅读顺序</label>
+        </div>
+        <div class="tg-field">
+          <div class="tg-inline">
+            <label style="margin:0">每批条数</label>
+            <input class="tg-num" id="tg-batch-size" type="number" value="10" min="1" />
+            <label style="margin:0">批间隔秒</label>
+            <input class="tg-num" id="tg-delay-sec" type="number" value="1" min="0" />
+          </div>
+        </div>
+        <div class="tg-actions">
+          <button class="btn primary" id="tg-forward-btn">开始转发</button>
+          <button class="btn-kill" id="tg-stop-btn">停止任务</button>
+          <button class="btn-kill" id="tg-clear-history-btn">清空历史</button>
+        </div>
+      </div>
+
+      <!-- 日志卡（与进程页同款） -->
+      <div class="card log-card">
+        <div class="card-head"><span class="card-title">执行日志</span></div>
+        <div class="log-body" id="tg-log-body"></div>
+      </div>
+
+      <!-- 运行状态条 -->
+      <div class="status-line" id="tg-status-line">空闲</div>
+    </div>
+  </main>
+
+  <!-- ===== 结束进程二次确认弹窗 ===== -->
+  <div class="modal-overlay" id="kill-overlay" hidden>
+    <div class="kill-modal" role="dialog" aria-modal="true" aria-labelledby="kill-title">
+      <!-- 红色圆形警告图标（内联 SVG 三角形 + 感叹号）-->
+      <div class="kill-warn-icon">
+        <svg viewBox="0 0 48 48" width="48" height="48" fill="none">
+          <circle cx="24" cy="24" r="22" fill="rgba(215,0,21,0.08)" stroke="#D70015" stroke-width="2"/>
+          <path d="M24 13l11 19H13l11-19z" fill="#D70015"/>
+          <rect x="22.5" y="20" width="3" height="9" rx="1.5" fill="#fff"/>
+          <rect x="22.5" y="31" width="3" height="3" rx="1.5" fill="#fff"/>
+        </svg>
+      </div>
+      <h2 class="kill-title" id="kill-title">确认结束进程？</h2>
+      <p class="kill-desc">即将强制结束以下 <span id="kill-count">0</span> 个进程，该操作不可撤销：</p>
+
+      <!-- 目标列表：浅灰底圆角容器，逐条一行 -->
+      <div class="kill-list" id="kill-list"></div>
+
+      <!-- 保护提示：绿色盾形 SVG -->
+      <div class="kill-protect">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="rgba(36,138,61,0.12)" stroke="#248A3D" stroke-width="2" stroke-linejoin="round"/>
+          <path d="M9 12l2 2 4-4" stroke="#248A3D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span>系统核心进程（csrss、lsass 等）已被自动拦截</span>
+      </div>
+
+      <!-- 非管理员时额外橙色提示 -->
+      <div class="kill-elev-warn" id="kill-elev-warn" hidden>
+        <span>当前非管理员身份，结束系统级进程可能失败</span>
+      </div>
+
+      <!-- 底部操作：右侧取消 + 确认结束 -->
+      <div class="kill-actions">
+        <button class="btn-kill-cancel" id="kill-cancel">取消</button>
+        <button class="btn-kill-confirm" id="kill-confirm">确认结束</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TG 扫码登录模态 ===== -->
+  <div class="modal-overlay" id="tg-qr-overlay" hidden>
+    <div class="tg-modal" role="dialog" aria-modal="true">
+      <h2 class="kill-title">扫码登录</h2>
+      <p class="kill-desc">使用 Telegram 手机客户端扫描下方二维码完成登录</p>
+      <div class="tg-qr-box">
+        <img id="tg-qr-img" class="tg-qr-img" alt="登录二维码" hidden />
+        <div id="tg-qr-placeholder" class="tg-qr-ph">二维码生成中…</div>
+      </div>
+      <div class="kill-actions">
+        <button class="btn-kill-cancel" id="tg-qr-cancel">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TG 聊天列表模态 ===== -->
+  <div class="modal-overlay" id="tg-chats-overlay" hidden>
+    <div class="tg-modal tg-chats-modal" role="dialog" aria-modal="true">
+      <h2 class="kill-title">聊天列表</h2>
+      <p class="kill-desc">点击行内按钮回填源或目标，复制 ID 到剪贴板</p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th class="col-tg-id">ID</th>
+              <th class="col-tg-type">类型</th>
+              <th>名称</th>
+              <th>用户名</th>
+              <th>主题</th>
+              <th class="col-tg-act">操作</th>
+            </tr>
+          </thead>
+          <tbody id="tg-chats-tbody">
+            <tr><td colspan="6"><div class="empty">暂无聊天，请稍候加载</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="kill-actions">
+        <button class="btn-kill-cancel" id="tg-chats-cancel">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -10,8 +10,8 @@
       "type": "go",
       "request": "launch",
       "mode": "exec",
-      "program": "${workspaceFolder}/bin/windows-util-gui.exe",
-      "cwd": "${workspaceFolder}",
+      "program": "${workspaceFolder}/wailsapp/build/bin/windows-util-gui-wails.exe",
+      "cwd": "${workspaceFolder}/wailsapp",
       "preLaunchTask": "打包发布版",
       "console": "integratedTerminal"
     },
@@ -23,8 +23,8 @@
       "type": "go",
       "request": "launch",
       "mode": "debug",
-      "program": "${workspaceFolder}",
-      "cwd": "${workspaceFolder}",
+      "program": "${workspaceFolder}/wailsapp",
+      "cwd": "${workspaceFolder}/wailsapp",
       "args": ["-no-elevate"],
       "console": "integratedTerminal"
     }

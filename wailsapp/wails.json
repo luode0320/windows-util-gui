@@ -1,0 +1,16 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "wailsapp",
+  "outputfilename": "windows-util-gui-wails",
+  "frontend:dir": "frontend",
+  "frontend:install": "",
+  "frontend:build": "",
+  "frontend:dev:watcher": "",
+  "frontend:dev:serverUrl": "",
+  "info": {
+    "productName": "Windows 工具箱 Wails PoC",
+    "productVersion": "0.1.0",
+    "copyright": "Copyright © 2026 luode",
+    "comments": "Wails v2 可行性验证：业务层零改动，仅替换 UI 层"
+  }
+}

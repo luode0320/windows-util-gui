@@ -1,26 +1,23 @@
 {
-  // Windows 工具箱构建任务。
-  // 默认构建任务（Ctrl+Shift+B）是"打包发布版"，日常改代码想看控制台日志时手动选"构建开发版"。
+  // Windows 工具箱构建任务（Wails v2 版）。
+  // UI 宿主工程在 wailsapp/（独立 Go 模块），wails build 自带 -H=windowsgui
+  // 与图标/清单资源，不需要手动处理 CONSOLE 子系统问题。
+  // wails CLI 位于 %USERPROFILE%\go\bin\wails.exe（go install 安装）。
   "version": "2.0.0",
   "tasks": [
     {
-      // 发布版必须带 -H=windowsgui：Go 默认生成 CONSOLE 子系统程序，
-      // 双击 exe 会额外弹出一个黑色控制台窗口，作为 GUI 工具不可接受。
-      // -s -w 去掉符号表与调试信息，-trimpath 去掉编译机的绝对路径。
+      // 发布构建：wails 内嵌前端资产并生成单文件 exe，
+      // 产物在 wailsapp/build/bin/windows-util-gui-wails.exe。
       "label": "打包发布版",
       "type": "process",
-      "command": "go",
-      "args": [
-        "build",
-        "-trimpath",
-        "-ldflags",
-        "-s -w -H=windowsgui",
-        "-o",
-        "bin/windows-util-gui.exe",
-        "."
-      ],
+      "command": "${userHome}\\go\\bin\\wails.exe",
+      "args": ["build"],
       "options": {
-        "cwd": "${workspaceFolder}"
+        "cwd": "${workspaceFolder}\\wailsapp",
+        "env": {
+          "GOPROXY": "https://goproxy.cn,direct",
+          "GOSUMDB": "sum.golang.google.cn"
+        }
       },
       "group": {
         "kind": "build",
@@ -31,17 +28,21 @@
         "panel": "shared",
         "clear": true
       },
-      "problemMatcher": ["$go"]
+      "problemMatcher": []
     },
     {
-      // 开发版保留 CONSOLE 子系统：启动失败时 main 会把错误写到 stderr，
-      // 终端里能直接看到并复制，比只有一个弹窗好排查。
-      "label": "构建开发版",
+      // 开发热重载：改前端即刷新，不用重新编译整个工程。
+      // 注意 dev 模式会起独立前端服务，与打包版行为略有差异，验收以打包版为准。
+      "label": "开发模式（热重载）",
       "type": "process",
-      "command": "go",
-      "args": ["build", "-o", "bin/windows-util-gui-dev.exe", "."],
+      "command": "${userHome}\\go\\bin\\wails.exe",
+      "args": ["dev"],
       "options": {
-        "cwd": "${workspaceFolder}"
+        "cwd": "${workspaceFolder}\\wailsapp",
+        "env": {
+          "GOPROXY": "https://goproxy.cn,direct",
+          "GOSUMDB": "sum.golang.google.cn"
+        }
       },
       "group": "build",
       "presentation": {
@@ -49,7 +50,7 @@
         "panel": "shared",
         "clear": true
       },
-      "problemMatcher": ["$go"]
+      "problemMatcher": []
     },
     {
       "label": "运行测试",
@@ -57,7 +58,11 @@
       "command": "go",
       "args": ["test", "./test/...", "-v"],
       "options": {
-        "cwd": "${workspaceFolder}"
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "GOPROXY": "https://goproxy.cn,direct",
+          "GOSUMDB": "sum.golang.google.cn"
+        }
       },
       "group": {
         "kind": "test",
@@ -69,32 +74,6 @@
         "clear": true
       },
       "problemMatcher": ["$go"]
-    },
-    {
-      // 只在改过 build/app.manifest 后才需要执行，平时不用跑：
-      // 生成的 syso 已随仓库提交，且该命令需要联网拉取 rsrc 工具。
-      "label": "重新生成资源文件",
-      "type": "process",
-      "command": "go",
-      "args": [
-        "run",
-        "github.com/akavel/rsrc@latest",
-        "-manifest",
-        "build/app.manifest",
-        "-arch",
-        "amd64",
-        "-o",
-        "rsrc_windows_amd64.syso"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared",
-        "clear": true
-      },
-      "problemMatcher": []
     }
   ]
 }
