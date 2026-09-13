@@ -186,7 +186,7 @@ func (t *TgTransferTool) Build(mw *walk.MainWindow, parent walk.Container) (*wal
 							t.cfg.Proxy = strings.TrimSpace(t.proxyEdit.Text())
 						},
 					},
-					d.Label{Text: "TDL 路径："},
+					d.Label{Text: "内置 TDL（已编译进本程序）："},
 					d.LineEdit{
 						AssignTo:  &t.tdlPathEdit,
 						Text:      t.cfg.TdlPath,
@@ -394,11 +394,11 @@ func (t *TgTransferTool) Build(mw *walk.MainWindow, parent walk.Container) (*wal
 	t.updateLoginState()
 	t.loadInitialData()
 
-	t.logf("Telegram 消息转发助手已加载（tdl.exe 已编译进主程序，单文件免依赖）。")
+	t.logf("Telegram 消息转发助手已加载。tdl.exe 已编译进本程序，上方路径仅为首次运行时的自动释放位置。")
 	if fi, err := os.Stat(t.cfg.TdlPath); err == nil && !fi.IsDir() {
 		// 界面同步显示实际生效路径，避免输入框停留在裸 "tdl.exe" 造成误读
 		t.tdlPathEdit.SetText(t.cfg.TdlPath)
-		t.logf("已检测到 TDL 程序: %s", t.cfg.TdlPath)
+		t.logf("已确认释放产物可用: %s（删除后会在下次启动时自动恢复）", t.cfg.TdlPath)
 	} else {
 		t.logf("提示: 内置 tdl.exe 释放失败或未找到，请点击【浏览...】手动选择 tdl.exe。")
 	}
