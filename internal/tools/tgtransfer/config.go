@@ -88,11 +88,10 @@ func MigrateLegacyDataDir(legacyDir, newBase string) error {
 	if fi, err := os.Stat(legacyDir); err != nil || !fi.IsDir() {
 		return nil
 	}
-	if _, err := os.Stat(filepath.Join(newBase, "bin", "tdl.exe")); err == nil {
-		return nil
-	}
 
-	// 2. 逐个顶层条目搬迁：bin（tdl 释放产物）、data（导出/记录）、logs、.tdl（登录会话）
+	// 2. 逐个顶层条目处理：bin（tdl 释放产物）、data（导出/记录）、logs、.tdl（登录会话）。
+	//    目标已存在时不能整体跳过——老 exe 曾在 exe 目录旁建过 data 目录，只搬"新位置缺的"，
+	//    并把旧释放产物直接清掉（嵌入内容以新位置为准），否则桌面会残留空壳 data 目录
 	if err := os.MkdirAll(newBase, 0755); err != nil {
 		return fmt.Errorf("创建新数据目录 %s 失败: %w", newBase, err)
 	}
@@ -104,8 +103,26 @@ func MigrateLegacyDataDir(legacyDir, newBase string) error {
 	for _, entry := range entries {
 		src := filepath.Join(legacyDir, entry.Name())
 		dst := filepath.Join(newBase, entry.Name())
+		if _, err := os.Stat(dst); err == nil {
+			// 目标已存在：旧 bin 副本无保留价值（嵌入内容会重新释放到新位置），直接删除；
+			// 其余重名条目（如两边都有 data）保留不覆盖，避免丢新位置已产生的数据
+			if entry.Name() == "bin" {
+				if err := os.RemoveAll(src); err != nil && firstErr == nil {
+					firstErr = err
+				}
+			}
+			continue
+		}
 		if err := moveDir(src, dst); err != nil && firstErr == nil {
 			firstErr = err
+		}
+	}
+
+	// 3. 处理完的旧目录若已清空则删除，不留桌面空壳；仍有残留说明有重名数据未决，保留待查。
+	//    旧结构是 data/tgtransfer 两层，tgtransfer 清空后把空的 data 父目录也一并移除
+	if remaining, readErr := os.ReadDir(legacyDir); readErr == nil && len(remaining) == 0 {
+		if err := os.Remove(legacyDir); err == nil {
+			_ = os.Remove(filepath.Dir(legacyDir))
 		}
 	}
 	return firstErr
