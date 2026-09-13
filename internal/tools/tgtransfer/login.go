@@ -6,16 +6,25 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
 
-// IsLoggedIn 检测本地当前 namespace 是否存在有效的登录会话文件。
+// IsLoggedIn 检测本地当前 namespace 是否存在有效的登录会话。
+//
+// 判定 = 登录成功标记存在 且 会话文件非空：tdl 的 login qr 即使未完成扫码确认，
+// 也会初始化一个非空的 Bolt 存储文件，仅靠会话文件存在会误报"已登录"，
+// 因此以扫码成功后写入的标记文件为准。
 //
 // [参数] cfg: 运行配置
-// [返回] 本地会话存在且大小大于 0 时返回 true
+// [返回] 标记与会话同时有效时返回 true
 // 最近修改时间: 2026-09-13
 func IsLoggedIn(cfg *Config) bool {
+	marker := filepath.Join(cfg.BaseDir, "login-active.flag")
+	if fi, err := os.Stat(marker); err != nil || fi.IsDir() {
+		return false
+	}
 	sessionFile := cfg.SessionPath()
 	fi, err := os.Stat(sessionFile)
 	if err != nil || fi.IsDir() {
@@ -24,12 +33,25 @@ func IsLoggedIn(cfg *Config) bool {
 	return fi.Size() > 0
 }
 
-// ClearSession 清除本地登录会话，重置登录状态。
+// MarkLoginActive 在扫码登录成功后写入登录标记文件。
+//
+// [参数] cfg: 运行配置
+// [返回] 写入失败返回 error
+// 最近修改时间: 2026-09-13
+func MarkLoginActive(cfg *Config) error {
+	return os.WriteFile(filepath.Join(cfg.BaseDir, "login-active.flag"),
+		[]byte(time.Now().Format(time.RFC3339)), 0644)
+}
+
+// ClearSession 清除本地登录会话与登录标记，重置登录状态。
 //
 // [参数] cfg: 运行配置
 // [返回] 清除失败时返回 error
 // 最近修改时间: 2026-09-13
 func ClearSession(cfg *Config) error {
+	if err := os.Remove(filepath.Join(cfg.BaseDir, "login-active.flag")); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("清除登录标记失败: %w", err)
+	}
 	sessionFile := cfg.SessionPath()
 	if err := os.Remove(sessionFile); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("清除登录会话文件失败: %w", err)

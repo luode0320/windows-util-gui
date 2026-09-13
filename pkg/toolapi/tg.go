@@ -180,11 +180,24 @@ func TgStartLogin(onQr func(imgPath string), logCb func(string), onDone func(err
 	go func() {
 		defer tgEndTask(cancel)
 		err := session.StartQrLogin(ctx, onQr, logCb)
+		if err == nil {
+			// 扫码确认成功后才写登录标记：IsLoggedIn 以标记 + 会话文件双条件判定，
+			// 避免把 tdl 初始化的空 Bolt 存储误报为"已登录"
+			_ = tgtransfer.MarkLoginActive(cfg)
+		}
 		if onDone != nil {
 			onDone(err)
 		}
 	}()
 	return nil
+}
+
+// TgClearSession 清除登录标记与会话文件，用于"重新扫码登录"前的状态重置。
+//
+// [返回] 清除失败返回 error
+// 最近修改时间: 2026-09-13
+func TgClearSession() error {
+	return tgtransfer.ClearSession(tgConfig())
 }
 
 // TgCancel 取消当前正在进行的长任务（登录/导出/转发共用一个可取消 ctx 槽）。

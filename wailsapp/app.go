@@ -2,6 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
+	"fmt"
+	"os"
+	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
@@ -158,13 +162,40 @@ func (a *App) TgDeleteRecord(path string) error {
 func (a *App) TgStartLogin() error {
 	return toolapi.TgStartLogin(
 		func(imgPath string) {
-			runtime.EventsEmit(a.ctx, "tg:qr", imgPath)
+			// WebView2 页面运行在 http://wails.localhost 源下，禁止加载 file:/// 本地文件，
+			// 必须把二维码转成 base64 data URL 推送，前端才能正常渲染
+			if dataURL := a.qrImageDataURL(imgPath); dataURL != "" {
+				runtime.EventsEmit(a.ctx, "tg:qr", dataURL)
+			}
 		},
 		a.tgLog,
 		func(err error) {
 			a.tgOpDone("login", err)
 		},
 	)
+}
+
+// qrImageDataURL 读取二维码图片并转为 base64 data URL。
+//
+// tdl 写盘与回调之间存在时序差，图片可能尚未写完，
+// 因此带有限次重试：每次检查文件存在且非空，最多等 2 秒。
+//
+// [参数] path: 二维码 PNG 文件路径
+// [返回] data:image/png;base64 形式的 data URL；读取失败返回空串
+// 最近修改时间: 2026-09-13
+func (a *App) qrImageDataURL(path string) string {
+	var data []byte
+	for attempt := 0; attempt < 7; attempt++ {
+		if fi, err := os.Stat(path); err == nil && !fi.IsDir() && fi.Size() > 0 {
+			data, err = os.ReadFile(path)
+			if err == nil && len(data) > 0 {
+				return "data:image/png;base64," + base64.StdEncoding.EncodeToString(data)
+			}
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	a.tgLog(fmt.Sprintf("读取二维码图片失败：%s", path))
+	return ""
 }
 
 // TgCancel 取消当前正在进行的登录/导出/转发长任务。
@@ -205,4 +236,12 @@ func (a *App) TgForward(in toolapi.TgForwardInput) error {
 // 最近修改时间: 2026-09-13
 func (a *App) TgClearHistory(sourceID, target string) error {
 	return toolapi.TgClearHistory(sourceID, target)
+}
+
+// TgClearSession 清除登录标记与会话文件，配合"重新扫码登录"使用。
+//
+// [返回] 清除失败返回 error
+// 最近修改时间: 2026-09-13
+func (a *App) TgClearSession() error {
+	return toolapi.TgClearSession()
 }

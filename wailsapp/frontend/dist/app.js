@@ -329,6 +329,7 @@
 //   TgExport(opts)              -> void
 //   TgForward(opts)             -> void
 //   TgClearHistory(sourceId,target) -> void
+//   TgClearSession()               -> void
 // 事件（window.runtime.EventsOn）：tg:log{line} / tg:qr{imagePath} / tg:opDone{op,ok,error}
 // 浏览器直接打开（无 window.go / window.runtime）时全部走兜底提示，不白屏。
 // =====================================================================
@@ -392,6 +393,7 @@
   let tgInited = false;        // 是否已惰性初始化
   let tgBusy = false;          // 长任务进行中
   let tgCurrentOp = "";        // 当前操作名（状态条展示）
+  let tgLoggedIn = false;      // 当前登录态（fillLogin 维护，重登确认分支使用）
 
   // ===== 安全取用 Go 侧绑定对象 =====
   function getApp() {
@@ -465,16 +467,17 @@
   function fillLogin(state) {
     const loggedIn = !!(state && state.loggedIn);
     tgLoginDot.className = loggedIn ? "dot" : "dot gray";
+    // 状态只展示登录与否；tdl 路径属于实现细节，不再拼进文案
     if (loggedIn) {
-      const device = (state && state.tdlPath) ? (" @ " + state.tdlPath) : "";
-      tgLoginText.textContent = "已登录" + device;
-      tgLoginBtn.disabled = true;
-      tgLoginBtn.textContent = "已登录";
+      tgLoginText.textContent = "已登录";
+      tgLoginBtn.disabled = false;
+      tgLoginBtn.textContent = "重新扫码登录";
     } else {
       tgLoginText.textContent = "未登录";
       tgLoginBtn.disabled = false;
       tgLoginBtn.textContent = "扫码登录";
     }
+    tgLoggedIn = loggedIn;
   }
 
   // ===== 内置状态 chip =====
@@ -733,11 +736,28 @@
   navTg.addEventListener("click", () => switchPage("tg"));
 
   // 卡片①
+  // 已登录时按钮变"重新扫码登录"：两步确认后先清会话再扫码（对齐 walk 版重登确认语义）
+  let reloginConfirming = false;
   tgLoginBtn.addEventListener("click", async () => {
     if (tgBusy) return;
+    if (tgLoggedIn && !reloginConfirming) {
+      reloginConfirming = true;
+      tgLoginBtn.textContent = "确认清除会话并重登？";
+      setTimeout(() => {
+        reloginConfirming = false;
+        tgLoginBtn.textContent = tgLoggedIn ? "重新扫码登录" : "扫码登录";
+      }, 4000);
+      return;
+    }
+    reloginConfirming = false;
     openQrModal();
     logTg("请求扫码登录…");
     try {
+      if (tgLoggedIn) {
+        // 旧会话先清除，否则 tdl 会沿用失效会话直接报错
+        await callTg("TgClearSession");
+        logTg("已清除旧登录会话");
+      }
       await callTg("TgStartLogin");
     } catch (e) {
       const msg = (typeof e === "string") ? e : String(e);
