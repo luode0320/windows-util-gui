@@ -218,27 +218,34 @@ func TestFindTdlPathPrefersBundledBinary(t *testing.T) {
 	}
 }
 
-// TestDefaultConfigAnchorsToExeDir 校验默认配置的数据目录锚定在 exe 所在目录而非进程工作目录。
+// TestDefaultConfigAnchorsToLocalAppData 校验默认配置的数据目录锚定在用户
+// %LOCALAPPDATA% 统一位置而非进程工作目录或 exe 目录（v2.0.0 起的行为变更）。
 //
 // DefaultConfig 会顺带触发嵌入 tdl.exe 的释放，本用例同时验证释放产物字节级一致。
 //
 // 最近修改时间: 2026-09-13
-func TestDefaultConfigAnchorsToExeDir(t *testing.T) {
+func TestDefaultConfigAnchorsToLocalAppData(t *testing.T) {
 	cfg := tgtransfer.DefaultConfig()
 	if !filepath.IsAbs(cfg.BaseDir) {
 		t.Fatalf("BaseDir 应为绝对路径，实际: %s", cfg.BaseDir)
 	}
 
-	exePath, err := os.Executable()
-	if err != nil {
-		t.Skipf("无法获取可执行文件路径，跳过: %v", err)
+	// 1. BaseDir 应位于 LOCALAPPDATA 下的 windows-util-gui\tgtransfer；
+	//    LOCALAPPDATA 缺失时允许回退到 UserConfigDir
+	local := os.Getenv("LOCALAPPDATA")
+	var wantBase string
+	if local != "" {
+		wantBase = filepath.Join(local, "windows-util-gui", "tgtransfer")
+	} else if cfgDir, err := os.UserConfigDir(); err == nil {
+		wantBase = filepath.Join(cfgDir, "windows-util-gui", "tgtransfer")
+	} else {
+		t.Skip("LOCALAPPDATA 与 UserConfigDir 均不可用，跳过锚点断言")
 	}
-	exeDir := filepath.Dir(exePath)
-	if !strings.HasPrefix(cfg.BaseDir, exeDir) {
-		t.Fatalf("数据目录应锚定在 exe 目录 %s 下，实际: %s", exeDir, cfg.BaseDir)
+	if cfg.BaseDir != wantBase {
+		t.Fatalf("数据目录应锚定在 %s，实际: %s", wantBase, cfg.BaseDir)
 	}
 
-	// 1. 嵌入释放产物应存在且与源文件字节级一致
+	// 2. 嵌入释放产物应存在且与源文件字节级一致
 	bundled := cfg.BundledTdlPath()
 	got, err := os.ReadFile(bundled)
 	if err != nil {

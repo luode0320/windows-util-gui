@@ -1,6 +1,8 @@
 package test
 
 import (
+	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 
@@ -170,5 +172,55 @@ func TestTgRecordsSmoke(t *testing.T) {
 	// 冒烟：不 panic 且可安全取长度（空环境可能为 nil，nil 仍可直接 len）。
 	if len(records) != len(toolapi.TgGetState().Records) {
 		t.Error("TgRecords 与 TgGetState.Records 长度应一致")
+	}
+}
+
+// TestMigrateLegacyDataDir 验证旧 exe 目录数据向 %LOCALAPPDATA% 新目录的一次性搬迁：
+// 覆盖搬迁成功、新位置已有数据时跳过、无旧目录时静默返回三种分支。
+// 纯文件系统操作，真实执行（无外部依赖）。
+func TestMigrateLegacyDataDir(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("仅验证 Windows 本地目录语义")
+	}
+	// 1. 旧目录有内容、新目录为空 → 应整体搬迁
+	legacy := t.TempDir()
+	newBase := t.TempDir()
+	for _, sub := range []string{"bin", "data", "logs", ".tdl"} {
+		if err := os.MkdirAll(filepath.Join(legacy, sub), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	marker := filepath.Join(legacy, "bin", "tdl.exe")
+	if err := os.WriteFile(marker, []byte("fake"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := tgtransfer.MigrateLegacyDataDir(legacy, newBase); err != nil {
+		t.Fatalf("迁移失败: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(newBase, "bin", "tdl.exe")); err != nil {
+		t.Fatalf("tdl.exe 未搬到新目录: %v", err)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("同卷搬迁后旧目录应已清空: %v", err)
+	}
+
+	// 2. 新位置已有 tdl 释放产物 → 跳过搬迁，旧目录保留（防覆盖）
+	legacy2 := t.TempDir()
+	newBase2 := t.TempDir()
+	os.MkdirAll(filepath.Join(legacy2, "bin"), 0755)
+	os.WriteFile(filepath.Join(legacy2, "bin", "tdl.exe"), []byte("old"), 0644)
+	os.MkdirAll(filepath.Join(newBase2, "bin"), 0755)
+	os.WriteFile(filepath.Join(newBase2, "bin", "tdl.exe"), []byte("new"), 0644)
+	if err := tgtransfer.MigrateLegacyDataDir(legacy2, newBase2); err != nil {
+		t.Fatalf("跳过分支不应报错: %v", err)
+	}
+	data, _ := os.ReadFile(filepath.Join(newBase2, "bin", "tdl.exe"))
+	if string(data) != "new" {
+		t.Fatalf("新位置数据被覆盖: %s", string(data))
+	}
+
+	// 3. 旧目录不存在 → 静默返回
+	if err := tgtransfer.MigrateLegacyDataDir(filepath.Join(t.TempDir(), "not-exist"), t.TempDir()); err != nil {
+		t.Fatalf("无旧目录分支不应报错: %v", err)
 	}
 }

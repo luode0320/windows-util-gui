@@ -29,9 +29,10 @@ type Config struct {
 // [返回] 初始配置对象
 // 最近修改时间: 2026-09-13
 func DefaultConfig() *Config {
-	// 1. 数据目录统一锚定在 exe 自身所在目录下的 data/tgtransfer，
-	//    不依赖进程工作目录（双击、任务计划、终端启动的 CWD 各不相同）
-	baseDir := filepath.Join(appRootDir(), "data", "tgtransfer")
+	// 1. 数据目录统一锚定到用户本地应用数据目录（%LOCALAPPDATA%），
+	//    exe 可能位于 Program Files 等只读位置，普通权限写 exe 目录会失败；
+	//    且发布后用户会移动 exe，数据跟着 exe 走不符合"用户数据"的语义
+	baseDir := defaultBaseDir()
 
 	cfg := &Config{
 		BaseDir:   baseDir,
@@ -41,12 +42,113 @@ func DefaultConfig() *Config {
 		Namespace: "default",
 	}
 
-	// 2. 优先把编译期嵌入的 tdl.exe 释放到数据目录（仅首次运行时落盘一次）
+	// 2. 旧版本把数据锚定在 exe 目录下，首次运行新版本时做一次性搬迁，
+	//    保证登录会话、导出记录与转发历史不因迁移丢失
+	legacy := filepath.Join(appRootDir(), "data", "tgtransfer")
+	if err := MigrateLegacyDataDir(legacy, baseDir); err != nil {
+		// 迁移失败不阻断启动：新位置会按空数据初始化，仅丢失旧会话与历史
+		_ = err
+	}
+
+	// 3. 优先把编译期嵌入的 tdl.exe 释放到数据目录（仅首次运行时落盘一次）
 	_, _ = cfg.EnsureBundledTdl()
 
-	// 3. 自动探查 tdl.exe
+	// 4. 自动探查 tdl.exe
 	cfg.TdlPath = FindTdlPath()
 	return cfg
+}
+
+// defaultBaseDir 返回 TG 数据的默认根目录。
+//
+// 优先使用 %LOCALAPPDATA%\windows-util-gui\tgtransfer（用户级统一临时/数据位置）；
+// LOCALAPPDATA 缺失时回退到系统配置目录（跨平台兼容）；再失败才退回 exe 目录。
+//
+// [返回] 数据根目录绝对路径
+// 最近修改时间: 2026-09-13
+func defaultBaseDir() string {
+	if local := strings.TrimSpace(os.Getenv("LOCALAPPDATA")); local != "" {
+		return filepath.Join(local, "windows-util-gui", "tgtransfer")
+	}
+	if cfgDir, err := os.UserConfigDir(); err == nil && cfgDir != "" {
+		return filepath.Join(cfgDir, "windows-util-gui", "tgtransfer")
+	}
+	return filepath.Join(appRootDir(), "data", "tgtransfer")
+}
+
+// MigrateLegacyDataDir 把旧版 exe 目录下的数据整体搬迁到新数据根目录。
+//
+// 仅当旧目录存在且新目录尚无 tdl 释放产物时执行（避免覆盖新版本已产生的数据）；
+// 同卷走 rename（瞬时完成），跨卷 rename 失败时降级为复制+删除。
+//
+// [参数] legacyDir: 旧数据目录；newBase: 新数据根目录
+// [返回] 无需迁移或迁移成功返回 nil；部分条目搬迁失败返回 error
+// 最近修改时间: 2026-09-13
+func MigrateLegacyDataDir(legacyDir, newBase string) error {
+	// 1. 旧目录不存在（首次安装）或已迁移过（新位置已有 tdl 释放产物）时无需处理
+	if fi, err := os.Stat(legacyDir); err != nil || !fi.IsDir() {
+		return nil
+	}
+	if _, err := os.Stat(filepath.Join(newBase, "bin", "tdl.exe")); err == nil {
+		return nil
+	}
+
+	// 2. 逐个顶层条目搬迁：bin（tdl 释放产物）、data（导出/记录）、logs、.tdl（登录会话）
+	if err := os.MkdirAll(newBase, 0755); err != nil {
+		return fmt.Errorf("创建新数据目录 %s 失败: %w", newBase, err)
+	}
+	entries, err := os.ReadDir(legacyDir)
+	if err != nil {
+		return err
+	}
+	var firstErr error
+	for _, entry := range entries {
+		src := filepath.Join(legacyDir, entry.Name())
+		dst := filepath.Join(newBase, entry.Name())
+		if err := moveDir(src, dst); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+// moveDir 移动单个目录：优先同卷 rename，跨卷失败时降级为复制+删除。
+//
+// [参数] src: 源目录；dst: 目标目录
+// [返回] 成功返回 nil
+// 最近修改时间: 2026-09-13
+func moveDir(src, dst string) error {
+	// 1. 同卷时 rename 瞬时完成，是首选路径
+	if err := os.Rename(src, dst); err == nil {
+		return nil
+	}
+
+	// 2. 跨卷降级：递归复制到目标后删除源目录；
+	//    复制失败保留源目录（数据不丢），删除失败不影响已复制的数据
+	if err := os.MkdirAll(dst, 0755); err != nil {
+		return fmt.Errorf("创建目标目录 %s 失败: %w", dst, err)
+	}
+	copyErr := filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, relErr := filepath.Rel(src, path)
+		if relErr != nil {
+			return relErr
+		}
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0755)
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		return os.WriteFile(target, data, 0644)
+	})
+	if copyErr != nil {
+		return copyErr
+	}
+	return os.RemoveAll(src)
 }
 
 // appRootDir 返回当前可执行文件所在目录的绝对路径。
@@ -137,7 +239,7 @@ func (c *Config) QrImagePath() string {
 
 // BundledTdlPath 返回嵌入 tdl.exe 的释放目标路径。
 //
-// [返回] data/tgtransfer/bin/tdl.exe 的绝对路径
+// [返回] 数据根目录下 bin/tdl.exe 的绝对路径（默认在 %LOCALAPPDATA% 下）
 // 最近修改时间: 2026-09-13
 func (c *Config) BundledTdlPath() string {
 	return filepath.Join(c.BaseDir, "bin", "tdl.exe")
@@ -192,10 +294,13 @@ func FindTdlPath() string {
 		}
 	}
 
-	// 2. 编译期嵌入的 tdl.exe 释放产物（单文件分发的首要来源）
-	bundledPath := (&Config{BaseDir: filepath.Join(appRootDir(), "data", "tgtransfer")}).BundledTdlPath()
-	if fi, err := os.Stat(bundledPath); err == nil && !fi.IsDir() {
-		return bundledPath
+	// 2. 数据根目录下的嵌入释放产物（单文件分发的首要来源），
+	//    兼容迁移前的旧位置（exe 目录 data/tgtransfer）
+	for _, base := range []string{defaultBaseDir(), filepath.Join(appRootDir(), "data", "tgtransfer")} {
+		bundledPath := (&Config{BaseDir: base}).BundledTdlPath()
+		if fi, err := os.Stat(bundledPath); err == nil && !fi.IsDir() {
+			return bundledPath
+		}
 	}
 
 	// 3. exe 同级相对候选（兼容旧的外置 resources 布局）
