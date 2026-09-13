@@ -27,11 +27,12 @@ type App struct {
 // 工具在此集中注册：新增工具时只需在 tools 切片追加实现，菜单、列表与页面切换会自动生效。
 //
 // [返回] 主窗口实例
-// 最近修改时间: 2026-09-12
+// 最近修改时间: 2026-09-13
 func NewApp() *App {
 	return &App{
 		tools: []Tool{
 			NewProcKillTool(),
+			NewTgTransferTool(),
 		},
 	}
 }
@@ -164,10 +165,10 @@ func (a *App) onToolChanged() {
 
 // showAbout 展示关于信息。
 //
-// 最近修改时间: 2026-09-12
+// 最近修改时间: 2026-09-13
 func (a *App) showAbout() {
 	walk.MsgBox(a.mw, "关于",
-		appTitle+"\n\n面向 Windows + WSL 的本地运维小工具集合。\n当前收录工具：进程占用查杀。",
+		appTitle+"\n\n面向 Windows + WSL 的本地运维与实用小工具集合。\n当前收录工具：\n1. 进程占用查杀\n2. TG 消息转发（基于 tdl 的 Telegram 消息批量导出与分批转发）",
 		walk.MsgBoxIconInformation)
 }
 

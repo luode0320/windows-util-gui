@@ -1,5 +1,6 @@
 # 构建产物
 /bin/
+resources/bin/
 
 # 本地调试产物
 *.log
