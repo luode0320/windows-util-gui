@@ -2,7 +2,8 @@
   // Windows 工具箱构建任务（Wails v2 版）。
   // UI 宿主工程在 wailsapp/（独立 Go 模块），wails build 自带 -H=windowsgui
   // 与图标/清单资源，不需要手动处理 CONSOLE 子系统问题。
-  // wails CLI 位于 %USERPROFILE%\go\bin\wails.exe（go install 安装）。
+  // wails CLI 固定使用项目内 tools/wails.exe（随仓库提交），
+  // 避免 ${userHome} 路径在某些环境下解析失败导致终端进程启动失败。
   "version": "2.0.0",
   "tasks": [
     {
@@ -10,7 +11,7 @@
       // 产物在 wailsapp/build/bin/windows-util-gui-wails.exe。
       "label": "打包发布版",
       "type": "process",
-      "command": "${userHome}\\go\\bin\\wails.exe",
+      "command": "${workspaceFolder}\\tools\\wails.exe",
       "args": ["build"],
       "options": {
         "cwd": "${workspaceFolder}\\wailsapp",
@@ -35,7 +36,7 @@
       // 注意 dev 模式会起独立前端服务，与打包版行为略有差异，验收以打包版为准。
       "label": "开发模式（热重载）",
       "type": "process",
-      "command": "${userHome}\\go\\bin\\wails.exe",
+      "command": "${workspaceFolder}\\tools\\wails.exe",
       "args": ["dev"],
       "options": {
         "cwd": "${workspaceFolder}\\wailsapp",
