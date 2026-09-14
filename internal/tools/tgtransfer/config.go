@@ -372,9 +372,35 @@ func TestNetworkFast(host string, port int, timeout time.Duration) error {
 // [参数] proxy: 代理地址字符串
 // [返回] 网络可用返回 nil，不可用时返回具体说明
 // 最近修改时间: 2026-09-13
+// NormalizeProxy 把用户输入的简化代理补全为 tdl 可用的完整代理 URL。
+//
+// 用户只需填「IP:端口」（如 127.0.0.1:7890），协议头由程序自行拼接：
+// 缺协议头时默认按 socks5 处理（tdl 官方示例与 Telegram 客户端均以 socks5 为主；
+// Clash/v2rayN 的混合端口同时接受 socks5 与 http，故 socks5 兼容面更广）。
+// 已带任意协议头（socks5://、socks5h://、http://、https://）时原样返回，不做改写。
+//
+// [参数] raw: 用户输入的代理地址（可能只是 IP:端口）
+// [返回] 完整代理 URL；输入为空时返回空串
+// 最近修改时间: 2026-09-14
+func NormalizeProxy(raw string) string {
+	p := strings.TrimSpace(raw)
+	if p == "" {
+		return ""
+	}
+	if strings.Contains(p, "://") {
+		return p
+	}
+	return "socks5://" + p
+}
+
+// ValidateNetwork 根据代理配置提前探测连通性，避免 tdl 长时间卡住。
+//
+// [参数] proxy: 代理地址字符串（允许只填 IP:端口，内部按 NormalizeProxy 规则补全）
+// [返回] 网络可用返回 nil，不可用时返回具体说明
+// 最近修改时间: 2026-09-14
 func ValidateNetwork(proxy string) error {
-	p := strings.TrimSpace(proxy)
 	// 1. 未填代理时，尝试直连 Telegram API 服务器探测
+	p := NormalizeProxy(proxy)
 	if p == "" {
 		if err := TestNetworkFast("api.telegram.org", 443, 3*time.Second); err != nil {
 			return fmt.Errorf("当前网络无法直连 Telegram (api.telegram.org:443)，请配置代理后再试")
@@ -383,9 +409,6 @@ func ValidateNetwork(proxy string) error {
 	}
 
 	// 2. 配置了代理时，检测代理主机端口是否连通
-	if !strings.Contains(p, "://") {
-		p = "http://" + p
-	}
 	u, err := url.Parse(p)
 	if err != nil {
 		return fmt.Errorf("代理地址格式无效: %w", err)

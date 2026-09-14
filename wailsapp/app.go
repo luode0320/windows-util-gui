@@ -126,8 +126,13 @@ func (a *App) TgSetProxy(proxy string) error {
 //
 // [返回] 网络不可用时返回具体说明
 // 最近修改时间: 2026-09-13
-func (a *App) TgValidateNetwork() error {
-	return toolapi.TgValidateNetwork()
+// TgValidateNetwork 探测代理连通性，返回可读结果说明。
+//
+// [参数] proxy: 待测代理（界面输入框当前值，允许只填 IP:端口；为空用已保存配置）
+// [返回] 连通时返回说明文本；不通返回 error
+// 最近修改时间: 2026-09-14
+func (a *App) TgValidateNetwork(proxy string) (string, error) {
+	return toolapi.TgValidateNetwork(proxy)
 }
 
 // TgRefreshChats 拉取最新聊天列表并写缓存，同步返回最新列表。
@@ -167,6 +172,10 @@ func (a *App) TgStartLogin() error {
 			if dataURL := a.qrImageDataURL(imgPath); dataURL != "" {
 				runtime.EventsEmit(a.ctx, "tg:qr", dataURL)
 			}
+		},
+		func() {
+			// 手机端已确认授权、会话正在写入：通知前端切到"正在完成登录"加载态
+			runtime.EventsEmit(a.ctx, "tg:loginConfirmed")
 		},
 		a.tgLog,
 		func(err error) {

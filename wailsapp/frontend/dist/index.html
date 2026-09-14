@@ -151,9 +151,9 @@
           </div>
         </div>
         <div class="tg-field">
-          <label>代理（可选）</label>
+          <label>代理（可选，只需 IP:端口，默认按 socks5 处理）</label>
           <div class="tg-inline">
-            <input class="search" id="tg-proxy-input" placeholder="http://127.0.0.1:7890" spellcheck="false" />
+            <input class="search" id="tg-proxy-input" placeholder="127.0.0.1:7890" spellcheck="false" />
             <button class="btn" id="tg-proxy-btn">保存代理</button>
           </div>
         </div>
@@ -295,8 +295,11 @@
       <p class="kill-desc">使用 Telegram 手机客户端扫描下方二维码完成登录</p>
       <div class="tg-qr-box">
         <img id="tg-qr-img" class="tg-qr-img" alt="登录二维码" hidden />
-        <div id="tg-qr-placeholder" class="tg-qr-ph">二维码生成中…</div>
+        <div id="tg-qr-spinner" class="qr-spinner"></div>
+        <div id="tg-qr-placeholder" class="tg-qr-ph" hidden>二维码加载失败，请重试</div>
       </div>
+      <!-- 状态提示：生成中 / 请扫码 / 已扫码正在完成 -->
+      <p class="tg-qr-hint" id="tg-qr-hint">正在生成二维码…</p>
       <div class="kill-actions">
         <button class="btn-kill-cancel" id="tg-qr-cancel">关闭</button>
       </div>
@@ -306,27 +309,41 @@
   <!-- ===== TG 聊天列表模态 ===== -->
   <div class="modal-overlay" id="tg-chats-overlay" hidden>
     <div class="tg-modal tg-chats-modal" role="dialog" aria-modal="true">
-      <h2 class="kill-title">聊天列表</h2>
-      <p class="kill-desc">点击行内按钮回填源或目标，复制 ID 到剪贴板</p>
-      <div class="table-scroll">
-        <table>
+      <!-- 头部：标题 + 右上角关闭（表格再长也始终可见） -->
+      <div class="chats-head">
+        <div>
+          <h2 class="kill-title">聊天列表</h2>
+          <p class="kill-desc">点击「设为源」用于导出，点击「设为目标」作为转发目的地；点击 ID 可复制</p>
+        </div>
+        <button class="modal-x" id="tg-chats-close" title="关闭" aria-label="关闭">×</button>
+      </div>
+      <!-- 工具栏：搜索 + 数量统计 -->
+      <div class="chats-toolbar">
+        <input class="search chats-search" id="tg-chats-search" placeholder="搜索 ID / 名称 / 用户名 / 类型" spellcheck="false" />
+        <span class="chats-count" id="tg-chats-count">共 0 个</span>
+      </div>
+      <!-- 表体：唯一滚动区域，表头吸顶 -->
+      <div class="chats-table-wrap">
+        <table class="chats-table">
           <thead>
             <tr>
-              <th class="col-tg-id">ID</th>
               <th class="col-tg-type">类型</th>
+              <th class="col-tg-id">ID</th>
               <th>名称</th>
-              <th>用户名</th>
-              <th>主题</th>
+              <th class="col-tg-user">用户名</th>
+              <th class="col-tg-topic">主题</th>
               <th class="col-tg-act">操作</th>
             </tr>
           </thead>
           <tbody id="tg-chats-tbody">
-            <tr><td colspan="6"><div class="empty">暂无聊天，请稍候加载</div></td></tr>
+            <tr><td colspan="6"><div class="empty">点击「查看聊天列表」加载</div></td></tr>
           </tbody>
         </table>
       </div>
-      <div class="kill-actions">
-        <button class="btn-kill-cancel" id="tg-chats-cancel">关闭</button>
+      <!-- 底部：提示 + 关闭（固定可见） -->
+      <div class="chats-foot">
+        <span class="chats-hint">提示：列表中已包含与其他聊天私聊产生的 Saved Messages（收藏夹）</span>
+        <button class="btn" id="tg-chats-cancel">关闭</button>
       </div>
     </div>
   </div>

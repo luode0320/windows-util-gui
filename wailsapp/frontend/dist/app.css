@@ -284,3 +284,7 @@ tbody tr:hover { background: var(--row-hover); }
 .btn-kill-confirm:hover:not(:disabled) { background: #B80012; border-color: #B80012; }
 .btn-kill-confirm:active:not(:disabled) { transform: scale(0.97); }
 .btn-kill-confirm:disabled { opacity: 0.6; cursor: wait; }
+
+/* hidden 属性的兜底：自定义 display（如 .tg-qr-img 的 block）会覆盖 UA 的 display:none，
+   导致"隐藏"元素仍然可见（裂图/alt 文字残留），这里强制生效 */
+[hidden] { display: none !important; }

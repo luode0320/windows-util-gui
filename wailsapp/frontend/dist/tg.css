@@ -89,19 +89,104 @@
 /* 二维码区：200×200 占位 */
 .tg-qr-box {
   width: 200px; height: 200px; margin: 12px auto;
-  display: flex; align-items: center; justify-content: center;
+  /* 纵向排列：图片与转圈互斥显示，各自在容器内水平居中（flex 行向会把两者并排） */
+  display: block; position: relative;
   background: var(--canvas); border-radius: 12px; overflow: hidden;
 }
 .tg-qr-img { width: 200px; height: 200px; object-fit: contain; display: block; }
 .tg-qr-ph {
   font-size: var(--fs-sm); color: var(--faint);
-  text-align: center; padding: 0 16px;
+  text-align: center; padding: 88px 16px 0;
 }
 
-/* 聊天列表表格列宽 */
-.col-tg-id { width: 90px; }
-.col-tg-type { width: 70px; }
-.col-tg-act { width: 220px; }
+/* ===== 聊天列表模态（重设计：固定头部/底部 + 唯一滚动表体）===== */
+.tg-chats-modal {
+  width: 900px; max-width: 94vw; max-height: 84vh;
+  padding: 0; overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.chats-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 12px; padding: 20px 24px 10px;
+}
+.chats-head .kill-desc { margin-top: 4px; }
+.modal-x {
+  flex-shrink: 0; width: 32px; height: 32px; margin-top: -2px;
+  border: none; background: transparent; border-radius: 8px;
+  font-size: 20px; line-height: 1; color: var(--muted);
+  cursor: pointer; font-family: inherit;
+}
+.modal-x:hover { background: var(--divider); color: var(--ink); }
+
+.chats-toolbar { display: flex; align-items: center; gap: 12px; padding: 0 24px 12px; }
+.chats-search { flex: 1; height: 36px; font-size: var(--fs-sm); padding: 0 var(--sp-4); }
+.chats-count { flex-shrink: 0; font-size: var(--fs-xs); color: var(--faint); white-space: nowrap; }
+
+/* 唯一滚动容器：表头 sticky 吸附，不影响头部与底部 */
+.chats-table-wrap { flex: 1; min-height: 0; overflow-y: auto; border-top: 1px solid var(--divider); }
+.chats-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.chats-table thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--row-hover); text-align: left;
+  font-size: var(--fs-xs); font-weight: 500; color: var(--muted);
+  padding: 10px 12px; border-bottom: 1px solid var(--divider);
+}
+.chats-table tbody td {
+  padding: 11px 12px; font-size: var(--fs-sm);
+  border-bottom: 1px solid var(--canvas);
+  vertical-align: middle;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.chats-table tbody tr:hover { background: var(--row-hover); }
+.chats-table tbody tr:last-child td { border-bottom: none; }
+
+/* 列宽：类型/ID/用户名/主题固定，名称占剩余主要宽度 */
+.col-tg-type { width: 92px; }
+.col-tg-id { width: 148px; }
+.col-tg-user { width: 150px; }
+.col-tg-topic { width: 170px; }
+.col-tg-act { width: 176px; }
+
+/* 类型徽章：群组/频道/用户/其他四色区分 */
+.chats-type {
+  display: inline-block; padding: 3px 9px; border-radius: var(--r-chip);
+  font-size: var(--fs-xs); font-weight: 500;
+}
+.chats-type.t-group { background: rgba(0, 102, 204, 0.10); color: var(--primary); }
+.chats-type.t-channel { background: rgba(255, 149, 0, 0.14); color: var(--warn); }
+.chats-type.t-user { background: var(--badge-state-bg); color: var(--success); }
+.chats-type.t-other { background: var(--divider); color: var(--muted); }
+
+/* ID 单元格：等宽数字 + 可点击复制 */
+.chats-id { font-variant-numeric: tabular-nums; font-size: var(--fs-xs); color: var(--muted); cursor: pointer; }
+.chats-id:hover { color: var(--primary); text-decoration: underline; }
+.chats-name { font-weight: 500; color: var(--ink); }
+.chats-user { color: var(--primary); font-size: var(--fs-xs); }
+.chats-empty-cell { color: var(--faint); }
+
+/* 行内操作：两枚小胶囊按钮 */
+.chats-act { display: flex; gap: 8px; }
+.tg-chat-btn {
+  height: 28px; padding: 0 12px; border-radius: 999px;
+  font-size: var(--fs-xs); font-weight: 500; font-family: inherit;
+  cursor: pointer; border: 1px solid transparent;
+  background: transparent; white-space: nowrap;
+}
+.tg-chat-btn[data-act="src"] { border-color: var(--hairline); color: var(--muted); }
+.tg-chat-btn[data-act="src"]:hover { border-color: var(--primary); color: var(--primary); }
+.tg-chat-btn[data-act="target"] { background: var(--primary); color: #fff; }
+.tg-chat-btn[data-act="target"]:hover { background: var(--primary-hover); }
+
+/* 加载 / 错误态 */
+.chats-loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 48px 0; color: var(--faint); font-size: var(--fs-sm); }
+.chats-loading .qr-spinner { width: 20px; height: 20px; margin: 0; border-width: 2px; }
+
+/* 底部固定操作栏 */
+.chats-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 24px 16px; border-top: 1px solid var(--divider);
+}
+.chats-hint { font-size: var(--fs-xs); color: var(--faint); }
 tbody td.tg-chat-act {
   display: flex; gap: 6px; align-items: center; padding-top: 8px; padding-bottom: 8px;
 }
@@ -117,4 +202,21 @@ tbody td.tg-chat-act {
 .tg-chat-id {
   font-variant-numeric: tabular-nums; color: var(--muted);
   cursor: pointer; font-size: var(--fs-xs);
+}
+
+/* ===== 二维码加载中转圈 ===== */
+.qr-spinner {
+  /* 200px 容器内居中：(200 - (48 + 两侧 4px 边框)) / 2 ≈ 72px 上边距 */
+  width: 48px; height: 48px; margin: 72px auto;
+  border: 4px solid var(--divider);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: qr-spin 0.8s linear infinite;
+}
+@keyframes qr-spin { to { transform: rotate(360deg); } }
+
+/* 二维码弹窗状态提示文案 */
+.tg-qr-hint {
+  font-size: var(--fs-sm); color: var(--muted);
+  text-align: center; margin: 4px 0 0;
 }

@@ -259,3 +259,55 @@ func TestDefaultConfigAnchorsToLocalAppData(t *testing.T) {
 		t.Fatalf("释放产物大小不符: 期望 %d 字节, 实际 %d 字节", len(embedded), len(got))
 	}
 }
+
+// TestIsLoginSuccessLine 校验登录成功关键词判定：
+// 命中中英文成功文案，且不误判"未登录/登录中"等中间态（关键字误判会导致弹窗瞬间关闭、二维码不出现）。
+func TestIsLoginSuccessLine(t *testing.T) {
+	hit := []string{
+		"登录成功",
+		"2026/09/14 登录成功，会话已保存",
+		"Successfully logged in as user",
+		"logged in successfully",
+		"login success",
+	}
+	for _, line := range hit {
+		if !tgtransfer.IsLoginSuccessLine(line) {
+			t.Fatalf("应判定为登录成功: %q", line)
+		}
+	}
+
+	miss := []string{
+		"",
+		"未登录",
+		"正在登录",
+		"请扫描二维码完成登录",
+		"等待手机端确认",
+	}
+	for _, line := range miss {
+		if tgtransfer.IsLoginSuccessLine(line) {
+			t.Fatalf("不应判定为登录成功: %q", line)
+		}
+	}
+}
+
+// TestNormalizeProxy 校验代理输入归一化：只需 IP:端口，协议头由程序补全；
+// 已带协议头的输入必须原样保留（不能改写用户显式指定的 http/socks5h 等）。
+func TestNormalizeProxy(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"", ""},
+		{"   ", ""},
+		{"127.0.0.1:7890", "socks5://127.0.0.1:7890"},
+		{" 127.0.0.1:7890 ", "socks5://127.0.0.1:7890"},
+		{"192.168.1.10:1080", "socks5://192.168.1.10:1080"},
+		{"socks5://127.0.0.1:7890", "socks5://127.0.0.1:7890"},
+		{"socks5h://127.0.0.1:7890", "socks5h://127.0.0.1:7890"},
+		{"http://127.0.0.1:7890", "http://127.0.0.1:7890"},
+		{"https://proxy.example.com:8443", "https://proxy.example.com:8443"},
+		{"socks5://user:pass@127.0.0.1:7890", "socks5://user:pass@127.0.0.1:7890"},
+	}
+	for _, c := range cases {
+		if got := tgtransfer.NormalizeProxy(c.in); got != c.want {
+			t.Fatalf("NormalizeProxy(%q) = %q, 期望 %q", c.in, got, c.want)
+		}
+	}
+}

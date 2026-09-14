@@ -320,8 +320,8 @@
 // 绑定契约（冻结，调用方式不得更改）：
 //   TgGetState()                -> {loggedIn,tdlPath,tdlBundled,proxy,chats[],records[]}
 //   TgSetProxy(proxy)           -> void
-//   TgValidateNetwork()         -> void
-//   TgRefreshChats()            -> {chats}
+//   TgValidateNetwork(proxy)    -> 可读结果文本（失败抛错）
+//   TgRefreshChats()            -> 聊天数组
 //   TgRecords()                 -> [...]
 //   TgDeleteRecord(path)        -> void
 //   TgStartLogin()              -> void
@@ -330,7 +330,7 @@
 //   TgForward(opts)             -> void
 //   TgClearHistory(sourceId,target) -> void
 //   TgClearSession()               -> void
-// 事件（window.runtime.EventsOn）：tg:log{line} / tg:qr{imagePath} / tg:opDone{op,ok,error}
+// 事件（window.runtime.EventsOn）：tg:log{line} / tg:qr{dataURL} / tg:loginConfirmed / tg:opDone{op,ok,error}
 // 浏览器直接打开（无 window.go / window.runtime）时全部走兜底提示，不白屏。
 // =====================================================================
 
@@ -383,9 +383,14 @@
   // 模态
   const tgQrOverlay = $("tg-qr-overlay");
   const tgQrImg = $("tg-qr-img");
+  const tgQrSpinner = $("tg-qr-spinner");
   const tgQrPlaceholder = $("tg-qr-placeholder");
+  const tgQrHint = $("tg-qr-hint");
   const tgQrCancel = $("tg-qr-cancel");
   const tgChatsOverlay = $("tg-chats-overlay");
+  const tgChatsSearch = $("tg-chats-search");
+  const tgChatsCount = $("tg-chats-count");
+  const tgChatsClose = $("tg-chats-close");
   const tgChatsTbody = $("tg-chats-tbody");
   const tgChatsCancel = $("tg-chats-cancel");
 
@@ -394,6 +399,7 @@
   let tgBusy = false;          // 长任务进行中
   let tgCurrentOp = "";        // 当前操作名（状态条展示）
   let tgLoggedIn = false;      // 当前登录态（fillLogin 维护，重登确认分支使用）
+  let tgChatList = [];         // 最近一次拉取的聊天列表（搜索过滤的数据源）
 
   // ===== 安全取用 Go 侧绑定对象 =====
   function getApp() {
@@ -467,11 +473,11 @@
   function fillLogin(state) {
     const loggedIn = !!(state && state.loggedIn);
     tgLoginDot.className = loggedIn ? "dot" : "dot gray";
-    // 状态只展示登录与否；tdl 路径属于实现细节，不再拼进文案
+    // 两种状态的按钮：未登录=扫码登录；已登录=重新登录（清会话后重扫，中途关闭即等同退出登录）
     if (loggedIn) {
       tgLoginText.textContent = "已登录";
       tgLoginBtn.disabled = false;
-      tgLoginBtn.textContent = "重新扫码登录";
+      tgLoginBtn.textContent = "重新登录";
     } else {
       tgLoginText.textContent = "未登录";
       tgLoginBtn.disabled = false;
@@ -551,14 +557,28 @@
       const path = (payload && payload.imagePath != null) ? payload.imagePath : (typeof payload === "string" ? payload : "");
       showTgQr(path);
     });
+    // 手机端已确认授权：二维码失效，切换到"正在完成登录"加载态，等 opDone 收尾
+    runtime.EventsOn("tg:loginConfirmed", function () {
+      showLoginConfirming();
+    });
     // 操作完成：更新状态条，并按 op 刷新对应数据
     runtime.EventsOn("tg:opDone", function (payload) {
       const op = payload && payload.op;
       const ok = payload && payload.ok;
       const err = payload && payload.error;
+      // 登录结束：无论成败都关闭二维码弹窗——成功时用户无需手动关闭并可立即看到登录态；
+      // 失败时（网络不通/超时/用户取消）弹窗已无意义，原因写入日志卡便于排查
+      if (op === "login") {
+        closeQrModal();
+      }
       if (ok) {
-        setTgStatus(("完成 · " + (op || "")), false);
-        logTg((op || "操作") + " 完成", false);
+        if (op === "login") {
+          setTgStatus("扫码登录成功，已刷新登录状态", false);
+          logTg("扫码登录成功，登录状态已更新", false);
+        } else {
+          setTgStatus(("完成 · " + (op || "")), false);
+          logTg((op || "操作") + " 完成", false);
+        }
       } else {
         setTgStatus(("失败 · " + (op || "")), false);
         logTg((op || "操作") + " 失败：" + (err || "未知错误"), true);
@@ -569,71 +589,147 @@
     });
   }
 
-  // ===== 二维码显示（含 file:/// 兜底与加载失败回退）=====
-  function showTgQr(path) {
-    if (!path) {
+  // ===== 二维码显示（base64 data URL；加载失败回退占位文案）=====
+  function showTgQr(src) {
+    if (!src) {
+      tgQrSpinner.hidden = true;
       tgQrImg.hidden = true;
       tgQrPlaceholder.hidden = false;
+      tgQrHint.textContent = "二维码加载失败，请关闭后重试";
       return;
     }
-    let src = path;
-    if (!/^data:/i.test(path)) {
-      // 本地绝对路径（exe 内）→ 补 file:/// 前缀
-      if (/^[a-zA-Z]:[\\/]/.test(path) || path.indexOf("/") === 0) {
-        src = "file:///" + path;
-      }
-    }
+    tgQrSpinner.hidden = true;
     tgQrPlaceholder.hidden = true;
     tgQrImg.hidden = false;
+    tgQrHint.textContent = "请用 Telegram 手机客户端扫描二维码";
     tgQrImg.onerror = function () {
       // 加载失败时回退占位文字，不阻塞流程
       tgQrImg.hidden = true;
       tgQrPlaceholder.hidden = false;
+      tgQrHint.textContent = "二维码加载失败，请关闭后重试";
     };
     tgQrImg.src = src;
+  }
+
+  // ===== 手机已确认授权：二维码已失效，切回加载态等待收尾 =====
+  function showLoginConfirming() {
+    tgQrImg.hidden = true;
+    tgQrPlaceholder.hidden = true;
+    tgQrSpinner.hidden = false;
+    tgQrHint.textContent = "已扫码，正在完成登录…";
   }
 
   // ===== 打开 / 关闭扫码登录模态 =====
   function openQrModal() {
     tgQrImg.hidden = true;
     tgQrImg.removeAttribute("src");
-    tgQrPlaceholder.hidden = false;
+    // 打开即进入加载态：转圈 + 状态提示，等 tg:qr 事件送达后再切到二维码
+    tgQrSpinner.hidden = false;
+    tgQrPlaceholder.hidden = true;
+    tgQrHint.textContent = "正在生成二维码…";
     tgQrOverlay.hidden = false;
   }
-  function closeQrModal() { tgQrOverlay.hidden = true; }
+  function closeQrModal() {
+    tgQrOverlay.hidden = true;
+    tgQrSpinner.hidden = true;
+    tgQrImg.hidden = true;
+  }
+  // 用户主动关闭弹窗 = 放弃本次扫码：顺手取消后台登录任务，
+  // 避免 tdl 登录进程与轮询在弹窗消失后继续空转（无任务时 TgCancel 为无副作用空操作）
+  function abortQrLogin() {
+    closeQrModal();
+    logTg("已关闭扫码窗口，取消本次登录", false);
+    try {
+      const p = callTg("TgCancel");
+      if (p && typeof p.catch === "function") p.catch(function () { /* 忽略取消失败 */ });
+    } catch (e) {
+      // 浏览器环境无绑定：忽略即可
+    }
+  }
 
   // ===== 打开 / 关闭聊天列表模态 =====
   function openChatsModal() {
+    tgChatsSearch.value = "";
     tgChatsOverlay.hidden = false;
   }
   function closeChatsModal() { tgChatsOverlay.hidden = true; }
 
-  // ===== 渲染聊天列表表格（5 列 + 操作）=====
-  function renderChatsTable(chats) {
-    const list = chats || [];
+  // ===== 聊天列表：类型徽章映射 =====
+  function chatTypeClass(type) {
+    const t = String(type || "").toLowerCase();
+    if (t.indexOf("channel") >= 0) return "t-channel";
+    if (t.indexOf("group") >= 0) return "t-group";
+    if (t.indexOf("user") >= 0 || t.indexOf("private") >= 0) return "t-user";
+    return "t-other";
+  }
+  function chatTypeLabel(type) {
+    const t = String(type || "").toLowerCase();
+    if (t.indexOf("supergroup") >= 0) return "超级群";
+    if (t.indexOf("group") >= 0) return "群组";
+    if (t.indexOf("channel") >= 0) return "频道";
+    if (t.indexOf("user") >= 0 || t.indexOf("private") >= 0) return "私聊";
+    return type ? String(type) : "其他";
+  }
+
+  // ===== 渲染聊天列表行（按搜索词过滤，统计实时更新）=====
+  function renderChatRows() {
+    const keyword = (tgChatsSearch.value || "").trim().toLowerCase();
+    const list = keyword
+      ? tgChatList.filter((c) => {
+          const hay = [c.id, c.name, c.username, c.topic, chatTypeLabel(c.type)].join(" ").toLowerCase();
+          return hay.indexOf(keyword) >= 0;
+        })
+      : tgChatList;
+
+    tgChatsCount.textContent = keyword
+      ? "匹配 " + list.length + " / 共 " + tgChatList.length + " 个"
+      : "共 " + tgChatList.length + " 个";
+
     if (!list.length) {
-      tgChatsTbody.innerHTML = '<tr><td colspan="6"><div class="empty">没有可用聊天</div></td></tr>';
+      const tip = tgChatList.length ? "没有匹配的聊天" : "没有可用聊天，请先点击「刷新聊天列表」";
+      tgChatsTbody.innerHTML = '<tr><td colspan="6"><div class="empty">' + tip + '</div></td></tr>';
       return;
     }
+
     tgChatsTbody.innerHTML = list.map((c) => {
-      const id = c && (c.id != null ? c.id : "");
-      const type = c && c.type ? c.type : "-";
-      const name = c && (c.name || "-") ? (c.name || "-") : "-";
-      const user = c && (c.username || "-") ? (c.username || "-") : "-";
-      const topic = c && (c.topic || "-") ? (c.topic || "-") : "-";
+      const id = (c && c.id != null) ? String(c.id) : "";
+      const name = (c && c.name) ? c.name : "";
+      const user = (c && c.username) ? c.username : "";
+      const topic = (c && c.topic) ? c.topic : "";
+      const escId = escapeHtml(id);
       return '<tr>' +
-        '<td class="mono">' + escapeHtml(String(id)) + '</td>' +
-        '<td>' + escapeHtml(String(type)) + '</td>' +
-        '<td>' + escapeHtml(String(name)) + '</td>' +
-        '<td>' + escapeHtml(String(user)) + '</td>' +
-        '<td>' + escapeHtml(String(topic)) + '</td>' +
-        '<td class="tg-chat-act">' +
-          '<button class="tg-chat-btn" data-act="src" data-id="' + escapeHtml(String(id)) + '">设为源</button>' +
-          '<button class="tg-chat-btn" data-act="target" data-id="' + escapeHtml(String(id)) + '">设为目标</button>' +
-          '<span class="tg-chat-id" data-id="' + escapeHtml(String(id)) + '" title="点击复制 ID">复制 ID</span>' +
+        '<td><span class="chats-type ' + chatTypeClass(c && c.type) + '">' + escapeHtml(chatTypeLabel(c && c.type)) + '</span></td>' +
+        '<td><span class="chats-id tg-chat-id" data-id="' + escId + '" title="点击复制 ID">' + escId + '</span></td>' +
+        '<td class="chats-name" title="' + escapeHtml(name) + '">' +
+          (name ? escapeHtml(name) : '<span class="chats-empty-cell">未命名</span>') + '</td>' +
+        '<td>' + (user ? '<span class="chats-user">@' + escapeHtml(user) + '</span>' : '<span class="chats-empty-cell">—</span>') + '</td>' +
+        '<td title="' + escapeHtml(topic) + '">' + (topic ? escapeHtml(topic) : '<span class="chats-empty-cell">—</span>') + '</td>' +
+        '<td class="chats-act">' +
+          '<button class="tg-chat-btn" data-act="target" data-id="' + escId + '">设为目标</button>' +
+          '<button class="tg-chat-btn" data-act="src" data-id="' + escId + '">设为源</button>' +
         '</td>' +
         '</tr>';
     }).join("");
+  }
+
+  // ===== 加载 / 错误态 =====
+  function renderChatsLoading() {
+    tgChatList = [];
+    tgChatsCount.textContent = "加载中…";
+    tgChatsTbody.innerHTML = '<tr><td colspan="6">' +
+      '<div class="chats-loading"><span class="qr-spinner"></span>正在拉取聊天列表…</div></td></tr>';
+  }
+  function renderChatsError(msg) {
+    tgChatList = [];
+    tgChatsCount.textContent = "共 0 个";
+    tgChatsTbody.innerHTML = '<tr><td colspan="6"><div class="empty">' +
+      escapeHtml("加载失败：" + msg) + '</div></td></tr>';
+  }
+
+  // ===== 填充聊天列表（数据入口）=====
+  function renderChatsTable(chats) {
+    tgChatList = Array.isArray(chats) ? chats : [];
+    renderChatRows();
   }
 
   // ===== 页面切换 =====
@@ -737,48 +833,81 @@
 
   // 卡片①
   // 已登录时按钮变"重新扫码登录"：两步确认后先清会话再扫码（对齐 walk 版重登确认语义）
-  let reloginConfirming = false;
-  tgLoginBtn.addEventListener("click", async () => {
-    if (tgBusy) return;
-    if (tgLoggedIn && !reloginConfirming) {
-      reloginConfirming = true;
-      tgLoginBtn.textContent = "确认清除会话并重登？";
+  // 两步确认工具：首次点击切换为确认文案，4 秒内再次点击才真正执行
+  // （危险操作免弹窗但防误触，与「清空历史」一致的交互范式）
+  function armConfirm(btn, confirmText, defaultText, action) {
+    if (btn.dataset.armed !== "1") {
+      btn.dataset.armed = "1";
+      btn.textContent = confirmText;
       setTimeout(() => {
-        reloginConfirming = false;
-        tgLoginBtn.textContent = tgLoggedIn ? "重新扫码登录" : "扫码登录";
+        btn.dataset.armed = "";
+        btn.textContent = defaultText;
       }, 4000);
       return;
     }
-    reloginConfirming = false;
+    btn.dataset.armed = "";
+    btn.textContent = defaultText;
+    action();
+  }
+
+  // 打开扫码弹窗并发起登录（已登录时调用前需先清会话）
+  async function startQrLogin() {
     openQrModal();
     logTg("请求扫码登录…");
     try {
-      if (tgLoggedIn) {
-        // 旧会话先清除，否则 tdl 会沿用失效会话直接报错
-        await callTg("TgClearSession");
-        logTg("已清除旧登录会话");
-      }
       await callTg("TgStartLogin");
     } catch (e) {
       const msg = (typeof e === "string") ? e : String(e);
       logTg("发起登录失败：" + msg, true);
     }
+  }
+
+  // 「扫码登录」（未登录）/「重新登录」（已登录，先清会话）
+  tgLoginBtn.addEventListener("click", () => {
+    if (tgBusy) return;
+    if (!tgLoggedIn) {
+      startQrLogin();
+      return;
+    }
+    armConfirm(tgLoginBtn, "确认重新登录？", "重新登录", async () => {
+      logTg("清除旧登录会话后重新登录…");
+      try {
+        await callTg("TgClearSession");
+      } catch (e) {
+        const msg = (typeof e === "string") ? e : String(e);
+        logTg("清除旧会话失败：" + msg, true);
+      }
+      // 先刷新为未登录态（按钮组同步切换），再走全新扫码流程
+      refreshTgState();
+      startQrLogin();
+    });
   });
+
   tgNetBtn.addEventListener("click", async () => {
-    logTg("开始网络测试…");
+    // 直接用输入框当前地址测试：避免"填了地址但忘了保存 → 测的是旧地址"的困惑
+    const proxy = tgProxyInput.value.trim();
+    logTg("开始网络测试" + (proxy ? "（" + proxy + "）" : "（直连）") + "…");
+    tgNetBtn.disabled = true;
     try {
-      await callTg("TgValidateNetwork");
-      logTg("网络测试已发起");
+      const msg = await callTg("TgValidateNetwork", proxy);
+      logTg(msg || "网络测试通过", false);
+      setTgStatus(msg || "网络测试通过", false);
     } catch (e) {
-      const msg = (typeof e === "string") ? e : String(e);
-      logTg("网络测试失败：" + msg, true);
+      const errMsg = (typeof e === "string") ? e : String(e);
+      logTg("网络测试失败：" + errMsg, true);
+      setTgStatus("网络测试失败", false);
+    } finally {
+      tgNetBtn.disabled = false;
     }
   });
-  function submitProxy() {
+  async function submitProxy() {
     const proxy = tgProxyInput.value.trim();
     logTg("保存代理：" + (proxy || "（清空）"));
     try {
-      callTg("TgSetProxy", proxy);
+      await callTg("TgSetProxy", proxy);
+      logTg("代理已保存并校验通过" + (proxy ? "：" + proxy : "（直连模式）"), false);
+      // 回显后端归一化后的值（如 127.0.0.1:7890 → socks5://127.0.0.1:7890）
+      refreshTgState();
     } catch (e) {
       const msg = (typeof e === "string") ? e : String(e);
       logTg("保存代理失败：" + msg, true);
@@ -789,17 +918,23 @@
 
   // 卡片②
   tgChatsBtn.addEventListener("click", async () => {
-    // 先刷新聊天列表再弹窗
+    // 先弹出弹窗并显示加载态（拉取需要走网络，避免点击后长时间无反馈），再填充数据
+    openChatsModal();
+    renderChatsLoading();
     try {
-      const res = await callTg("TgRefreshChats");
-      renderChatsTable(res && res.chats);
+      const chats = await callTg("TgRefreshChats");
+      // 绑定返回的是聊天数组本身（不是 {chats} 包装对象）
+      renderChatsTable(Array.isArray(chats) ? chats : []);
+      logTg("聊天列表已更新，共 " + tgChatList.length + " 个", false);
     } catch (e) {
       const msg = (typeof e === "string") ? e : String(e);
-      renderChatsTable([]);
+      renderChatsError(msg);
       logTg("刷新聊天列表失败：" + msg, true);
     }
-    openChatsModal();
   });
+
+  // 搜索框实时过滤
+  tgChatsSearch.addEventListener("input", renderChatRows);
   tgRangeSeg.addEventListener("click", (e) => {
     const seg = e.target.closest(".seg");
     if (!seg) return;
@@ -912,13 +1047,15 @@
   });
 
   // 模态关闭交互
-  tgQrCancel.addEventListener("click", closeQrModal);
-  tgQrOverlay.addEventListener("click", (e) => { if (e.target === tgQrOverlay) closeQrModal(); });
+  tgQrCancel.addEventListener("click", abortQrLogin);
+  tgQrOverlay.addEventListener("click", (e) => { if (e.target === tgQrOverlay) abortQrLogin(); });
   tgChatsCancel.addEventListener("click", closeChatsModal);
+  tgChatsClose.addEventListener("click", closeChatsModal);
   tgChatsOverlay.addEventListener("click", (e) => { if (e.target === tgChatsOverlay) closeChatsModal(); });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
-      if (!tgQrOverlay.hidden) closeQrModal();
+      if (!tgQrOverlay.hidden) { abortQrLogin(); return; }
+      if (!tgChatsOverlay.hidden) { closeChatsModal(); return; }
       if (!tgChatsOverlay.hidden) closeChatsModal();
     }
   });

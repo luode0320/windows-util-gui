@@ -145,27 +145,52 @@ func TgGetState() TgState {
 // [参数] proxy: 代理地址，如 socks5://127.0.0.1:7890
 // [返回] 校验或网络探测失败返回 error
 // 最近修改时间: 2026-09-13
+// TgSetProxy 写入代理配置并即时做网络预检；代理非法或不可达时返回 error。
+//
+// 入参允许只填「IP:端口」：归一化（补 socks5:// 协议头）后再落库与校验，
+// 保证界面显示值与实际传给 tdl 的 --proxy 参数一致。
+//
+// [参数] proxy: 代理地址，如 127.0.0.1:7890 或 socks5://127.0.0.1:7890
+// [返回] 校验或网络探测失败返回 error
+// 最近修改时间: 2026-09-14
 func TgSetProxy(proxy string) error {
 	cfg := tgConfig()
-	cfg.Proxy = proxy
-	return tgtransfer.ValidateNetwork(proxy)
+	normalized := tgtransfer.NormalizeProxy(proxy)
+	cfg.Proxy = normalized
+	return tgtransfer.ValidateNetwork(normalized)
 }
 
-// TgValidateNetwork 按当前代理配置探测网络连通性。
+// TgValidateNetwork 按给定代理探测连通性，返回可读的结果说明。
 //
-// [返回] 网络不可用时返回具体说明
-// 最近修改时间: 2026-09-13
-func TgValidateNetwork() error {
-	return tgtransfer.ValidateNetwork(tgConfig().Proxy)
+// 优先使用入参（界面输入框当前值）：用户刚填完地址就点"网络测试"时，
+// 测的应当是他填的这个地址，而不要求先保存；入参为空时回退到已保存配置，
+// 两者都为空则执行直连 Telegram 探测。
+//
+// [参数] proxy: 待测代理，允许只填 IP:端口；为空时用已保存配置
+// [返回] 连通时返回可读说明；不通或地址非法时返回 error
+// 最近修改时间: 2026-09-14
+func TgValidateNetwork(proxy string) (string, error) {
+	target := tgtransfer.NormalizeProxy(proxy)
+	if target == "" {
+		target = tgConfig().Proxy
+	}
+	if err := tgtransfer.ValidateNetwork(target); err != nil {
+		return "", err
+	}
+	if target == "" {
+		return "直连 api.telegram.org:443 连通正常", nil
+	}
+	return "代理 " + target + " 连通正常", nil
 }
 
 // TgStartLogin 启动扫码登录长任务：先做网络预检，失败立即返回 error；
-// 通过则申请可取消 ctx 并异步执行 StartQrLogin，二维码就绪经 onQr 回调、进度经 logCb、结束经 onDone。
+// 通过则申请可取消 ctx 并异步执行 StartQrLogin——二维码就绪经 onQr 回调、
+// 手机确认授权经 onConfirmed 回调、进度经 logCb、结束经 onDone。
 //
-// [参数] onQr: 二维码图片路径就绪回调；logCb: 实时日志回调；onDone: 任务结束回调（err 为 nil 表示成功）
+// [参数] onQr: 二维码图片路径就绪回调；onConfirmed: 手机确认授权回调；logCb: 实时日志回调；onDone: 任务结束回调（err 为 nil 表示成功）
 // [返回] 网络预检失败返回 error；其余情况（含登录失败）经 onDone 异步回传
-// 最近修改时间: 2026-09-13
-func TgStartLogin(onQr func(imgPath string), logCb func(string), onDone func(err error)) error {
+// 最近修改时间: 2026-09-14
+func TgStartLogin(onQr func(imgPath string), onConfirmed func(), logCb func(string), onDone func(err error)) error {
 	cfg := tgConfig()
 	if err := tgtransfer.ValidateNetwork(cfg.Proxy); err != nil {
 		return err
@@ -179,7 +204,7 @@ func TgStartLogin(onQr func(imgPath string), logCb func(string), onDone func(err
 
 	go func() {
 		defer tgEndTask(cancel)
-		err := session.StartQrLogin(ctx, onQr, logCb)
+		err := session.StartQrLogin(ctx, onQr, onConfirmed, logCb)
 		if err == nil {
 			// 扫码确认成功后才写登录标记：IsLoggedIn 以标记 + 会话文件双条件判定，
 			// 避免把 tdl 初始化的空 Bolt 存储误报为"已登录"
